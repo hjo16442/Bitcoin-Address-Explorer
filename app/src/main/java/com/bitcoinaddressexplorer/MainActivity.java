@@ -18,7 +18,8 @@ public class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private EditText addressInput, bulkInput, scanStartInput, scanCountInput;
     private TextView status, result, bulkResult, scanResult, savedView, fundedView;
-    private Button checkButton, bulkButton, scanButton;
+    private Button checkButton, bulkButton, scanButton, quickButton;
+    private TextView quickResult;
     private SharedPreferences prefs;
     private ScanDatabase database;
 
@@ -64,10 +65,15 @@ public class MainActivity extends Activity {
         bulkButton = button("شروع بررسی گروهی"); page.addView(bulkButton);
         bulkResult = text("", 14, false); page.addView(bulkResult);
 
-        page.addView(text("جست‌وجوی خودکار آدرس‌ها و موجودی‌ها", 18, true));
-        page.addView(text("فقط یک بار دکمه را بزن. برنامه از بلاک صفر شروع می‌کند، خودش آدرس‌ها را استخراج و موجودی هرکدام را بررسی می‌کند. هنگام کار برنامه را باز نگه دار؛ با همان دکمه می‌توانی اسکن را متوقف کنی.", 12, false));
-        scanButton = button("شروع جست‌وجوی خودکار"); page.addView(scanButton);
-        scanResult = text("هنوز جست‌وجو شروع نشده است.", 13, false); page.addView(scanResult);
+        page.addView(text("جست‌وجوی سریع آدرس‌های دارای موجودی", 18, true));
+        page.addView(text("دریافت فهرست آماده ۱۰۰ آدرس بزرگ بیت‌کوین از یک شاخص عمومی به‌روز؛ بدون اسکن بلاک‌ها از ابتدا. این فهرست عمدتاً شامل آدرس‌های بزرگ صرافی‌ها و سرویس‌هاست و به معنی کیف پول گمشده یا قابل برداشت نیست.", 12, false));
+        quickButton = button("شروع جست‌وجوی سریع ۱۰۰ آدرس"); page.addView(quickButton);
+        quickResult = text("هنوز جست‌وجوی سریع انجام نشده است.", 13, false); page.addView(quickResult);
+
+        page.addView(text("اسکن کامل تاریخچه بلاک‌چین (بسیار کند)", 18, true));
+        page.addView(text("این روش از بلاک صفر شروع می‌کند و ممکن است بسیار طولانی شود یا به محدودیت سرویس برسد. برای جست‌وجوی سریع از دکمه بالاتر استفاده کن.", 12, false));
+        scanButton = button("شروع اسکن کامل بلاک‌ها"); page.addView(scanButton);
+        scanResult = text("اسکن کامل هنوز شروع نشده است.", 13, false); page.addView(scanResult);
         page.addView(text("آدرس‌های دارای موجودی", 18, true));
         fundedView = text(database.getFundedResults(100), 13, false); page.addView(fundedView);
 
@@ -76,6 +82,7 @@ public class MainActivity extends Activity {
         page.addView(text("این برنامه فقط آدرس‌های عمومی ظاهرشده در بلاک‌های اسکن‌شده یا واردشده را می‌شناسد. آدرس‌های استفاده‌نشده قابل کشف نیستند. خطای API به‌عنوان موجودی صفر گزارش نمی‌شود.", 12, false));
         checkButton.setOnClickListener(v -> checkSingle());
         bulkButton.setOnClickListener(v -> checkBulk());
+        quickButton.setOnClickListener(v -> startRichListScan());
         scanButton.setOnClickListener(v -> startBlockScan());
         setContentView(scroll);
     }
@@ -163,6 +170,30 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { bulkButton.setEnabled(true); status.setText("بررسی گروهی پایان یافت."); showSaved(); });
         });
     }
+    private void startRichListScan() {
+        quickButton.setEnabled(false);
+        quickResult.setText("در حال دریافت فهرست عمومی آدرس‌های دارای موجودی...");
+        worker.execute(() -> RichListScanner.scan(this, new RichListScanner.Callback() {
+            @Override public void onComplete(int count, String source) {
+                runOnUiThread(() -> {
+                    quickResult.setText("دریافت موفق: " + count +
+                        " آدرس دارای موجودی از فهرست عمومی.\nمنبع: " + source +
+                        "\nموجودی‌ها مربوط به آخرین به‌روزرسانی منبع هستند.");
+                    fundedView.setText(database.getFundedResults(100));
+                    quickButton.setEnabled(true);
+                    showSaved();
+                });
+            }
+            @Override public void onError(String message) {
+                runOnUiThread(() -> {
+                    quickResult.setText("جست‌وجوی سریع ناموفق بود: " + message +
+                        "\nهیچ موجودی ساختگی یا صفر ثبت نشد.");
+                    quickButton.setEnabled(true);
+                });
+            }
+        }));
+    }
+
     private void startBlockScan() {
         if (BlockAddressScanner.isRunning()) {
             BlockAddressScanner.stop();
