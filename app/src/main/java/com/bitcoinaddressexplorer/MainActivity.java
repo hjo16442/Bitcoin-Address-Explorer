@@ -17,7 +17,7 @@ public class MainActivity extends Activity {
     private static final String API = "https://mempool.space/api";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private EditText addressInput, bulkInput, scanStartInput, scanCountInput;
-    private TextView status, result, bulkResult, scanResult, savedView;
+    private TextView status, result, bulkResult, scanResult, savedView, fundedView;
     private Button checkButton, bulkButton, scanButton;
     private SharedPreferences prefs;
 
@@ -62,17 +62,17 @@ public class MainActivity extends Activity {
         bulkButton = button("شروع بررسی گروهی"); page.addView(bulkButton);
         bulkResult = text("", 14, false); page.addView(bulkResult);
 
-        page.addView(text("استخراج آدرس از بلاک‌های عمومی", 18, true));
-        page.addView(text("بدون سرور شخصی؛ فقط بلاک‌های انتخاب‌شده را از API عمومی می‌خواند. هر نوبت حداکثر ۱۰ بلاک.", 12, false));
+        page.addView(text("جست‌وجوی خودکار آدرس‌ها و موجودی‌ها", 18, true));
+        page.addView(text("از بلاک پیدایش (Genesis) به بعد مرحله‌ای جلو می‌رود. هر نوبت حداکثر ۱۰ بلاک استخراج و ۲۰ آدرس بررسی می‌شود. برای ادامه دوباره دکمه را بزن.", 12, false));
         scanStartInput = new EditText(this); scanStartInput.setSingleLine(true);
         scanStartInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        scanStartInput.setHint("ارتفاع بلاک شروع (خالی = جدیدترین بلاک‌ها)");
+        scanStartInput.setVisibility(View.GONE);
         page.addView(scanStartInput);
         scanCountInput = new EditText(this); scanCountInput.setSingleLine(true);
         scanCountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
         scanCountInput.setText("1"); scanCountInput.setHint("تعداد بلاک‌ها (۱ تا ۱۰)");
         page.addView(scanCountInput);
-        scanButton = button("استخراج آدرس‌های این بلاک‌ها"); page.addView(scanButton);
+        scanButton = button("شروع / ادامه جست‌وجوی خودکار"); page.addView(scanButton);
         scanResult = text("آدرس‌های پیدا‌شده به‌صورت محلی ذخیره می‌شوند؛ این کار کل تاریخ بیت‌کوین را اسکن نمی‌کند.", 13, false);
         page.addView(scanResult);
 
@@ -178,10 +178,16 @@ public class MainActivity extends Activity {
                     @Override public void onProgress(String message) {
                         runOnUiThread(() -> scanResult.setText(message));
                     }
-                    @Override public void onComplete(int blocks, int added, int total) {
+                    @Override public void onComplete(int blocks, int added, int total, int checked,
+                                                     int remaining, String funded, int nextHeight) {
                         runOnUiThread(() -> {
-                            scanResult.setText("پایان اسکن. بلاک‌های بررسی‌شده: " + blocks +
-                                "\nآدرس جدید ذخیره‌شده: " + added + "\nکل آدرس‌های ذخیره‌شده: " + total);
+                            scanResult.setText("این نوبت تمام شد. بلاک‌های بررسی‌شده: " + blocks +
+                                "\nآدرس جدید استخراج‌شده: " + added +
+                                "\nکل آدرس‌های ذخیره‌شده: " + total +
+                                "\nآدرس‌های بررسی‌شده از نظر موجودی: " + checked +
+                                "\nآدرس‌های باقی‌مانده در صف: " + remaining +
+                                "\nارتفاع شروع نوبت بعد: " + nextHeight);
+                            if (!funded.isEmpty()) fundedView.setText(funded);
                             scanButton.setEnabled(true); showSaved();
                         });
                     }
