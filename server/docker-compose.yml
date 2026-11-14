@@ -1,0 +1,43 @@
+services:
+  bitcoin:
+    image: ruimarinho/bitcoin-core:latest
+    command:
+      - -server=1
+      - -txindex=1
+      - -prune=0
+      - -rpcbind=0.0.0.0
+      - -rpcallowip=172.20.0.0/16
+      - -rpcuser=${BTC_RPC_USER:?Set BTC_RPC_USER in .env}
+      - -rpcpassword=${BTC_RPC_PASSWORD:?Set BTC_RPC_PASSWORD in .env}
+      - -datadir=/bitcoin/.bitcoin
+    volumes:
+      - bitcoin-data:/bitcoin/.bitcoin
+    networks:
+      - indexer-net
+    restart: unless-stopped
+
+  indexer:
+    build: .
+    environment:
+      BTC_RPC_URL: http://bitcoin:8332
+      BTC_RPC_USER: ${BTC_RPC_USER:?Set BTC_RPC_USER in .env}
+      BTC_RPC_PASSWORD: ${BTC_RPC_PASSWORD:?Set BTC_RPC_PASSWORD in .env}
+      DB_PATH: /data/addresses.sqlite3
+      SCAN_INTERVAL_SECONDS: 60
+    volumes:
+      - indexer-data:/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      - bitcoin
+    networks:
+      - indexer-net
+    restart: unless-stopped
+
+volumes:
+  bitcoin-data:
+  indexer-data:
+
+networks:
+  indexer-net:
+    driver: bridge
