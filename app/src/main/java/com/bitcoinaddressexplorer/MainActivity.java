@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
     private EditText addressInput, bulkInput, scanStartInput, scanCountInput;
     private TextView status, result, bulkResult, scanResult, savedView, fundedView;
     private Button checkButton, bulkButton, scanButton;
-    private SharedPreferences prefs;
+    private SharedPreferences prefs;\n    private ScanDatabase database;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -53,7 +53,7 @@ public class MainActivity extends Activity {
         Button save = button("ذخیره آدرس بررسی‌شده"); page.addView(save);
         save.setOnClickListener(v -> {
             String a = addressInput.getText().toString().trim();
-            if (!a.isEmpty()) { prefs.edit().putBoolean("a_"+a, true).apply(); showSaved(); status.setText("آدرس در فهرست محلی ذخیره شد."); }
+            if (!a.isEmpty()) { prefs.edit().putBoolean("a_"+a, true).apply(); database.addAddresses(java.util.Collections.singleton(a)); showSaved(); status.setText("آدرس در فهرست محلی ذخیره شد."); }
         });
         page.addView(text("بررسی گروهی", 18, true));
         bulkInput = new EditText(this); bulkInput.setMinLines(4); bulkInput.setGravity(Gravity.TOP);
@@ -63,18 +63,11 @@ public class MainActivity extends Activity {
         bulkResult = text("", 14, false); page.addView(bulkResult);
 
         page.addView(text("جست‌وجوی خودکار آدرس‌ها و موجودی‌ها", 18, true));
-        page.addView(text("از بلاک پیدایش (Genesis) به بعد مرحله‌ای جلو می‌رود. هر نوبت حداکثر ۱۰ بلاک استخراج و ۲۰ آدرس بررسی می‌شود. برای ادامه دوباره دکمه را بزن.", 12, false));
-        scanStartInput = new EditText(this); scanStartInput.setSingleLine(true);
-        scanStartInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        scanStartInput.setVisibility(View.GONE);
-        page.addView(scanStartInput);
-        scanCountInput = new EditText(this); scanCountInput.setSingleLine(true);
-        scanCountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        scanCountInput.setText("1"); scanCountInput.setHint("تعداد بلاک‌ها (۱ تا ۱۰)");
-        page.addView(scanCountInput);
-        scanButton = button("شروع / ادامه جست‌وجوی خودکار"); page.addView(scanButton);
-        scanResult = text("آدرس‌های پیدا‌شده به‌صورت محلی ذخیره می‌شوند؛ این کار کل تاریخ بیت‌کوین را اسکن نمی‌کند.", 13, false);
-        page.addView(scanResult);
+        page.addView(text("فقط یک بار دکمه را بزن. برنامه از بلاک صفر شروع می‌کند، خودش آدرس‌ها را استخراج و موجودی هرکدام را بررسی می‌کند. هنگام کار برنامه را باز نگه دار؛ با همان دکمه می‌توانی اسکن را متوقف کنی.", 12, false));
+        scanButton = button("شروع جست‌وجوی خودکار"); page.addView(scanButton);
+        scanResult = text("هنوز جست‌وجو شروع نشده است.", 13, false); page.addView(scanResult);
+        page.addView(text("آدرس‌های دارای موجودی", 18, true));
+        fundedView = text(database.getFundedResults(100), 13, false); page.addView(fundedView);
 
         page.addView(text("آدرس‌های ذخیره‌شده", 18, true));
         savedView = text("", 13, false); page.addView(savedView);
@@ -168,45 +161,62 @@ public class MainActivity extends Activity {
         });
     }
     private void startBlockScan() {
-        final String start = scanStartInput.getText().toString().trim();
-        final String count = scanCountInput.getText().toString().trim();
-        scanButton.setEnabled(false);
-        scanResult.setText("در حال دریافت اطلاعات بلاک‌ها؛ برنامه را باز نگه دار...");
-        worker.execute(() -> {
-            try {
-                BlockAddressScanner.scan(this, start, count, new BlockAddressScanner.Callback() {
-                    @Override public void onProgress(String message) {
-                        runOnUiThread(() -> scanResult.setText(message));
-                    }
-                    @Override public void onComplete(int blocks, int added, int total, int checked,
-                                                     int remaining, String funded, int nextHeight) {
-                        runOnUiThread(() -> {
-                            scanResult.setText("این نوبت تمام شد. بلاک‌های بررسی‌شده: " + blocks +
-                                "\nآدرس جدید استخراج‌شده: " + added +
-                                "\nکل آدرس‌های ذخیره‌شده: " + total +
-                                "\nآدرس‌های بررسی‌شده از نظر موجودی: " + checked +
-                                "\nآدرس‌های باقی‌مانده در صف: " + remaining +
-                                "\nارتفاع شروع نوبت بعد: " + nextHeight);
-                            if (!funded.isEmpty()) fundedView.setText(funded);
-                            scanButton.setEnabled(true); showSaved();
-                        });
-                    }
-                    @Override public void onError(String message) {
-                        runOnUiThread(() -> { scanResult.setText("اسکن متوقف شد: " + message + "\nآدرس‌های بلاک‌های کامل‌شده حفظ شده‌اند."); scanButton.setEnabled(true); showSaved(); });
-                    }
-                });
-            } catch (Exception e) {
-                runOnUiThread(() -> { scanResult.setText("خطا: " + e.getMessage()); scanButton.setEnabled(true); });
+        if (BlockAddressScanner.isRunning()) {
+            BlockAddressScanner.stop();
+            scanResult.setText("درخواست توقف ثبت شد؛ پس از پایان درخواست جاری متوقف می‌شود...");
+            scanButton.setEnabled(false);
+            return;
+        }
+        scanButton.setText("توقف اسکن");
+        scanButton.setEnabled(true);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        scanResult.setText("در حال شروع اسکن از بلاک صفر...");
+        worker.execute(() -> BlockAddressScanner.scan(this, new BlockAddressScanner.Callback() {
+            @Override public void onProgress(String message) {
+                runOnUiThread(() -> scanResult.setText(message));
             }
-        });
+            @Override public void onFundedAddress(String address, long confirmed, long pending, long txCount) {
+                runOnUiThread(() -> fundedView.setText(database.getFundedResults(100)));
+            }
+            @Override public void onComplete(int blocks, int added, int total, int checked,
+                                             int nextHeight, boolean reachedTip) {
+                runOnUiThread(() -> {
+                    scanResult.setText((reachedTip ? "اسکن تا آخرین بلاک فعلی تمام شد." : "اسکن متوقف شد.") +
+                        "\\nبلاک‌های این نوبت: " + blocks +
+                        "\\nآدرس‌های تازه: " + added +
+                        "\\nکل آدرس‌های ذخیره‌شده: " + total +
+                        "\\nآدرس‌های بررسی‌شده: " + checked +
+                        "\\nارتفاع ادامه بعدی: " + nextHeight);
+                    fundedView.setText(database.getFundedResults(100));
+                    scanButton.setText("شروع / ادامه جست‌وجوی خودکار");
+                    scanButton.setEnabled(true);
+                    getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    showSaved();
+                });
+            }
+            @Override public void onError(String message) {
+                runOnUiThread(() -> {
+                    scanResult.setText("اسکن متوقف شد: " + message +
+                        "\\nپیشرفت ذخیره شده است؛ با زدن دکمه دوباره ادامه می‌دهد.");
+                    fundedView.setText(database.getFundedResults(100));
+                    scanButton.setText("ادامه جست‌وجوی خودکار");
+                    scanButton.setEnabled(true);
+                    getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    showSaved();
+                });
+            }
+        }));
     }
     private void showSaved() {
-        java.util.Map<String,?> all = prefs.getAll();
-        StringBuilder b = new StringBuilder();
-        int count = 0;
-        for (String k : all.keySet()) if (k.startsWith("a_")) { count++; if (count <= 300) b.append(k.substring(2)).append("\n"); }
+        int count = database.getTotalCount();
         savedView.setText(count == 0 ? "هنوز آدرسی ذخیره نشده است." :
-            "تعداد کل: " + count + (count > 300 ? " (نمایش ۳۰۰ مورد اول)\n" : "\n") + b.toString());
+            "تعداد کل آدرس‌های ذخیره‌شده: " + count + "\\n" + database.getAddressList(300));
     }
-    @Override protected void onDestroy() { super.onDestroy(); worker.shutdownNow(); }
+    @Override protected void onDestroy() {
+        BlockAddressScanner.stop();
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        worker.shutdownNow();
+        database.close();
+        super.onDestroy();
+    }
 }
