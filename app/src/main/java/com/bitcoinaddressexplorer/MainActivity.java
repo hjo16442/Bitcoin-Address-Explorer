@@ -25,6 +25,7 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         prefs = getSharedPreferences("explorer", MODE_PRIVATE);
+        database = new ScanDatabase(this);
         buildUi();
         showSaved();
     }
