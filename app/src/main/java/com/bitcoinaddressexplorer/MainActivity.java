@@ -16,9 +16,9 @@ import java.util.concurrent.*;
 public class MainActivity extends Activity {
     private static final String API = "https://mempool.space/api";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private EditText addressInput, bulkInput;
-    private TextView status, result, bulkResult, savedView;
-    private Button checkButton, bulkButton;
+    private EditText addressInput, bulkInput, scanStartInput, scanCountInput;
+    private TextView status, result, bulkResult, scanResult, savedView;
+    private Button checkButton, bulkButton, scanButton;
     private SharedPreferences prefs;
 
     @Override public void onCreate(Bundle state) {
@@ -61,11 +61,27 @@ public class MainActivity extends Activity {
         page.addView(bulkInput);
         bulkButton = button("شروع بررسی گروهی"); page.addView(bulkButton);
         bulkResult = text("", 14, false); page.addView(bulkResult);
+
+        page.addView(text("استخراج آدرس از بلاک‌های عمومی", 18, true));
+        page.addView(text("بدون سرور شخصی؛ فقط بلاک‌های انتخاب‌شده را از API عمومی می‌خواند. هر نوبت حداکثر ۱۰ بلاک.", 12, false));
+        scanStartInput = new EditText(this); scanStartInput.setSingleLine(true);
+        scanStartInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        scanStartInput.setHint("ارتفاع بلاک شروع (خالی = جدیدترین بلاک‌ها)");
+        page.addView(scanStartInput);
+        scanCountInput = new EditText(this); scanCountInput.setSingleLine(true);
+        scanCountInput.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        scanCountInput.setText("1"); scanCountInput.setHint("تعداد بلاک‌ها (۱ تا ۱۰)");
+        page.addView(scanCountInput);
+        scanButton = button("استخراج آدرس‌های این بلاک‌ها"); page.addView(scanButton);
+        scanResult = text("آدرس‌های پیدا‌شده به‌صورت محلی ذخیره می‌شوند؛ این کار کل تاریخ بیت‌کوین را اسکن نمی‌کند.", 13, false);
+        page.addView(scanResult);
+
         page.addView(text("آدرس‌های ذخیره‌شده", 18, true));
         savedView = text("", 13, false); page.addView(savedView);
-        page.addView(text("این برنامه آدرس‌های واردشده را بررسی می‌کند؛ کل بلاک‌چین را برای استخراج همه آدرس‌ها اسکن نمی‌کند. خطای API به‌عنوان موجودی صفر گزارش نمی‌شود.", 12, false));
+        page.addView(text("این برنامه فقط آدرس‌های عمومی ظاهرشده در بلاک‌های اسکن‌شده یا واردشده را می‌شناسد. آدرس‌های استفاده‌نشده قابل کشف نیستند. خطای API به‌عنوان موجودی صفر گزارش نمی‌شود.", 12, false));
         checkButton.setOnClickListener(v -> checkSingle());
         bulkButton.setOnClickListener(v -> checkBulk());
+        scanButton.setOnClickListener(v -> startBlockScan());
         setContentView(scroll);
     }
     private Button button(String s) {
@@ -151,11 +167,40 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { bulkButton.setEnabled(true); status.setText("بررسی گروهی پایان یافت."); showSaved(); });
         });
     }
+    private void startBlockScan() {
+        final String start = scanStartInput.getText().toString().trim();
+        final String count = scanCountInput.getText().toString().trim();
+        scanButton.setEnabled(false);
+        scanResult.setText("در حال دریافت اطلاعات بلاک‌ها؛ برنامه را باز نگه دار...");
+        worker.execute(() -> {
+            try {
+                BlockAddressScanner.scan(this, start, count, new BlockAddressScanner.Callback() {
+                    @Override public void onProgress(String message) {
+                        runOnUiThread(() -> scanResult.setText(message));
+                    }
+                    @Override public void onComplete(int blocks, int added, int total) {
+                        runOnUiThread(() -> {
+                            scanResult.setText("پایان اسکن. بلاک‌های بررسی‌شده: " + blocks +
+                                "\nآدرس جدید ذخیره‌شده: " + added + "\nکل آدرس‌های ذخیره‌شده: " + total);
+                            scanButton.setEnabled(true); showSaved();
+                        });
+                    }
+                    @Override public void onError(String message) {
+                        runOnUiThread(() -> { scanResult.setText("اسکن متوقف شد: " + message + "\nآدرس‌های بلاک‌های کامل‌شده حفظ شده‌اند."); scanButton.setEnabled(true); showSaved(); });
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> { scanResult.setText("خطا: " + e.getMessage()); scanButton.setEnabled(true); });
+            }
+        });
+    }
     private void showSaved() {
         java.util.Map<String,?> all = prefs.getAll();
         StringBuilder b = new StringBuilder();
-        for (String k : all.keySet()) if (k.startsWith("a_")) b.append(k.substring(2)).append("\n");
-        savedView.setText(b.length()==0 ? "هنوز آدرسی ذخیره نشده است." : b.toString());
+        int count = 0;
+        for (String k : all.keySet()) if (k.startsWith("a_")) { count++; if (count <= 300) b.append(k.substring(2)).append("\n"); }
+        savedView.setText(count == 0 ? "هنوز آدرسی ذخیره نشده است." :
+            "تعداد کل: " + count + (count > 300 ? " (نمایش ۳۰۰ مورد اول)\n" : "\n") + b.toString());
     }
     @Override protected void onDestroy() { super.onDestroy(); worker.shutdownNow(); }
 }
