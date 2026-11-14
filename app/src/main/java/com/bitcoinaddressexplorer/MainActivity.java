@@ -19,7 +19,8 @@ public class MainActivity extends Activity {
     private EditText addressInput, bulkInput, scanStartInput, scanCountInput;
     private TextView status, result, bulkResult, scanResult, savedView, fundedView;
     private Button checkButton, bulkButton, scanButton;
-    private SharedPreferences prefs;\n    private ScanDatabase database;
+    private SharedPreferences prefs;
+    private ScanDatabase database;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
