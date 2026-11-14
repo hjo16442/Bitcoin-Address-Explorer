@@ -150,6 +150,7 @@ public class MainActivity extends Activity {
                     out.append(i).append(") ").append(a).append("\n   موجودی: ").append(btc(x.optLong("confirmed")))
                        .append(" | تراکنش: ").append(x.optLong("txCount")).append("\n");
                     prefs.edit().putBoolean("a_"+a, true).apply();
+                    database.addCheckedAddress(a, x.optLong("confirmed"), x.optLong("pending"), x.optLong("txCount"));
                 } catch (Exception e) {
                     out.append(i).append(") ").append(a).append("\n   خطا: ").append(e.getMessage()).append("\n");
                 }
@@ -182,11 +183,11 @@ public class MainActivity extends Activity {
                                              int nextHeight, boolean reachedTip) {
                 runOnUiThread(() -> {
                     scanResult.setText((reachedTip ? "اسکن تا آخرین بلاک فعلی تمام شد." : "اسکن متوقف شد.") +
-                        "\\nبلاک‌های این نوبت: " + blocks +
-                        "\\nآدرس‌های تازه: " + added +
-                        "\\nکل آدرس‌های ذخیره‌شده: " + total +
-                        "\\nآدرس‌های بررسی‌شده: " + checked +
-                        "\\nارتفاع ادامه بعدی: " + nextHeight);
+                        "\nبلاک‌های این نوبت: " + blocks +
+                        "\nآدرس‌های تازه: " + added +
+                        "\nکل آدرس‌های ذخیره‌شده: " + total +
+                        "\nآدرس‌های بررسی‌شده: " + checked +
+                        "\nارتفاع ادامه بعدی: " + nextHeight);
                     fundedView.setText(database.getFundedResults(100));
                     scanButton.setText("شروع / ادامه جست‌وجوی خودکار");
                     scanButton.setEnabled(true);
@@ -197,7 +198,7 @@ public class MainActivity extends Activity {
             @Override public void onError(String message) {
                 runOnUiThread(() -> {
                     scanResult.setText("اسکن متوقف شد: " + message +
-                        "\\nپیشرفت ذخیره شده است؛ با زدن دکمه دوباره ادامه می‌دهد.");
+                        "\nپیشرفت ذخیره شده است؛ با زدن دکمه دوباره ادامه می‌دهد.");
                     fundedView.setText(database.getFundedResults(100));
                     scanButton.setText("ادامه جست‌وجوی خودکار");
                     scanButton.setEnabled(true);
@@ -210,7 +211,7 @@ public class MainActivity extends Activity {
     private void showSaved() {
         int count = database.getTotalCount();
         savedView.setText(count == 0 ? "هنوز آدرسی ذخیره نشده است." :
-            "تعداد کل آدرس‌های ذخیره‌شده: " + count + "\\n" + database.getAddressList(300));
+            "تعداد کل آدرس‌های ذخیره‌شده: " + count + "\n" + database.getAddressList(300));
     }
     @Override protected void onDestroy() {
         BlockAddressScanner.stop();
